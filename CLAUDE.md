@@ -30,6 +30,10 @@ Use the following technologies:
 - **Background Processing:** .NET BackgroundService
 - **Containerization:** Docker
 - **Frontend:** Typescript and React
+- **Authentication:** ASP.NET Core Identity (bearer tokens)
+- **Validation:** FluentValidation
+- **API Docs:** Scalar (OpenAPI)
+- **Testing:** xUnit + FluentAssertions
 
 ## 3. Architecture Requirements
 
@@ -57,53 +61,57 @@ Each feature should encapsulate the components it needs, such as:
 - Share code only when functionality is genuinely reused across multiple features.
 - Put shared infrastructure and cross-cutting concerns in dedicated folders.
 
-### Suggested Project Structure
+### Project Structure
 
-Organize the project approximately as follows:
+The API and the Worker are separate hosts (see `docs/adr/0002-postgres-job-queue-separate-worker.md`), so code both need lives in `Core`:
 
 ```text
-VideoProcessing/
-├── Features/
-│   ├── Videos/
-│   │   ├── UploadVideo/
-│   │   ├── GetVideo/
-│   │   ├── ListVideos/
-│   │   └── DeleteVideo/
-│   │
-│   ├── Processing/
-│   │   ├── ExtractThumbnail/
-│   │   ├── TrimVideo/
-│   │   ├── ConvertVideo/
-│   │   ├── ResizeVideo/
-│   │   ├── ExtractAudio/
-│   │   └── CompressVideo/
-│   │
-│   └── Jobs/
-│       ├── GetJobStatus/
-│       └── ListJobs/
+src/
+├── Api/                          # HTTP host
+│   ├── Features/
+│   │   ├── Videos/
+│   │   │   ├── CreateUploadSlot/
+│   │   │   ├── ConfirmUpload/
+│   │   │   ├── GetVideo/
+│   │   │   ├── ListVideos/
+│   │   │   ├── GetVideoDownload/
+│   │   │   └── DeleteVideo/
+│   │   ├── Processing/
+│   │   │   ├── ExtractThumbnail/
+│   │   │   ├── TrimVideo/
+│   │   │   ├── ConvertVideo/
+│   │   │   ├── ResizeVideo/
+│   │   │   ├── ExtractAudio/
+│   │   │   └── CompressVideo/
+│   │   └── Jobs/
+│   │       ├── GetJob/
+│   │       ├── ListJobs/
+│   │       └── GetOutputDownload/
+│   ├── Common/                   # auth, validation endpoint filter, error mapping
+│   └── Program.cs
 │
-├── Infrastructure/
-│   ├── VideoProcessing/
-│   │   ├── FFmpeg/
-│   │   └── FFprobe/
-│   ├── Storage/
-│   │   └── AzureBlobStorage/
-│   └── BackgroundJobs/
+├── Worker/                       # background host
+│   ├── JobProcessing/            # polling, SKIP LOCKED claims, leases, timeouts
+│   ├── Cleanup/                  # sweep of Videos stuck in AwaitingUpload
+│   └── Program.cs
 │
-├── Data/
-│   ├── AppDbContext.cs
-│   └── Configurations/
+├── Core/                         # shared by Api and Worker
+│   ├── Domain/                   # entities, enums, Result<T>
+│   ├── Data/                     # AppDbContext, Configurations, Migrations
+│   ├── Operations/               # Operation parameters -> FFmpeg arguments
+│   └── Infrastructure/
+│       ├── FFmpeg/
+│       ├── FFprobe/
+│       └── Storage/              # Azure Blob, SAS issuance
 │
-├── Common/
-│   ├── Authentication/
-│   ├── Errors/
-│   └── Extensions/
-│
-├── Program.cs
-└── appsettings.json
+└── web/                          # React + TypeScript (Vite)
+
+tests/
+├── UnitTests/
+└── IntegrationTests/             # Testcontainers (Postgres, Azurite), real FFmpeg on tiny sample clips
 ```
 
-Treat this structure as a starting point, not a rigid requirement. Explain any deviations.
+Features stay in `Api`: they are the HTTP use cases. Put code in `Core` only when both hosts need it.
 
 ### Architectural Boundaries
 
@@ -122,7 +130,7 @@ Create an abstraction for video processing so that the rest of the application d
 Support the following operations:
 
 1. Extract a thumbnail at a specified timestamp.
-2. Trim a video using start time and duration.
+2. Trim a video using start and end timestamps.
 3. Convert between MP4 and WebM.
 4. Resize videos while maintaining aspect ratio.
 5. Extract audio into MP3.
@@ -162,6 +170,27 @@ Users should be able to retrieve the status of their processing jobs.
 - Avoid shell command construction; execute FFmpeg with safely separated process arguments.
 - Ensure users can only access their own videos and processing jobs.
 - Clean up temporary files after processing.
+
+## 7. Code Conventions
+
+### Naming
+- DTOs: `[Entity]Dto`, `Create[Entity]Request`, `Get[Entity]Request`, `Create[Entity]Response`, `Get[Entity]Response`
+- Use the domain terms defined in `GLOSSARY.md`.
+
+### Patterns We Use
+- Primary constructors for DI
+- Records for DTOs, request and response contracts
+- Result<T> pattern for error handling (no exceptions for flow control)
+- File-scoped namespaces
+- Always pass CancellationToken to async methods
+- All request validation in FluentValidation validators, auto-registered via assembly scanning
+- Always create a new branch based off of main when making changes
+
+### Patterns We DON'T Use (Never Suggest)
+- Repository pattern (use EF Core directly)
+- AutoMapper (write explicit mappings)
+- Exceptions for business logic errors
+- Stored procedures
 
 ## Agent skills
 
