@@ -192,6 +192,27 @@ Users should be able to retrieve the status of their processing jobs.
 - Exceptions for business logic errors
 - Stored procedures
 
+## Commands
+
+Run from the repository root. Integration tests and the local stack need Docker running.
+
+| Task | Command |
+|---|---|
+| Restore local tools (`dotnet-ef`) | `dotnet tool restore` |
+| Build | `dotnet build` |
+| Test (all) | `dotnet test` |
+| Unit tests only | `dotnet test tests/UnitTests` |
+| Single test class | `dotnet test tests/IntegrationTests --filter "FullyQualifiedName~AccountTests"` |
+| Start Postgres + Azurite only | `docker compose up -d postgres azurite` |
+| Run Api (Scalar at http://localhost:5080/scalar) | `dotnet run --project src/Api` |
+| Run Worker | `dotnet run --project src/Worker` |
+| Run whole stack (Api at http://localhost:8080) | `docker compose up --build` |
+| Add migration | `dotnet ef migrations add <Name> --project src/Core --startup-project src/Api --output-dir Data/Migrations` |
+| Update database | `dotnet ef database update --project src/Core --startup-project src/Api` |
+| Format | `dotnet format` |
+
+The Api applies pending migrations on startup in Development, so `database update` is only needed outside that.
+
 ## Agent skills
 
 ### Issue tracker
