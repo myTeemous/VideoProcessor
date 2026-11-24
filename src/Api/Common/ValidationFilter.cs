@@ -1,24 +1,36 @@
+using System.Text.Json;
 using FluentValidation;
 
 namespace VideoProcessor.Api.Common;
 
 /// <summary>Runs the FluentValidation validator for <typeparamref name="TRequest"/> before the endpoint handler.</summary>
-public sealed class ValidationFilter<TRequest> : IEndpointFilter
+public sealed class ValidationFilter<TRequest>(IValidator<TRequest> validator) : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
-        var validator = context.HttpContext.RequestServices.GetRequiredService<IValidator<TRequest>>();
-
-        var request = context.Arguments.OfType<TRequest>().SingleOrDefault()
-            ?? throw new InvalidOperationException(
-                $"Endpoint '{context.HttpContext.GetEndpoint()?.DisplayName}' has no {typeof(TRequest).Name} argument to validate.");
+        var request = context.Arguments.OfType<TRequest>().FirstOrDefault();
+        if (request is null)
+        {
+            return TypedResults.ValidationProblem(
+                new Dictionary<string, string[]> { [""] = ["A request body is required."] });
+        }
 
         var validation = await validator.ValidateAsync(request, context.HttpContext.RequestAborted);
+        if (validation.IsValid)
+        {
+            return await next(context);
+        }
 
-        return validation.IsValid
-            ? await next(context)
-            : TypedResults.ValidationProblem(validation.ToDictionary());
+        // Error keys follow the JSON property names clients send (camelCase), not the C# names.
+        var errors = validation.Errors
+            .GroupBy(failure => ToJsonPath(failure.PropertyName))
+            .ToDictionary(group => group.Key, group => group.Select(failure => failure.ErrorMessage).ToArray());
+
+        return TypedResults.ValidationProblem(errors);
     }
+
+    private static string ToJsonPath(string propertyPath) =>
+        string.Join('.', propertyPath.Split('.').Select(JsonNamingPolicy.CamelCase.ConvertName));
 }
 
 public static class ValidationExtensions

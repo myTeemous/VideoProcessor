@@ -1,7 +1,6 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.Extensions.DependencyInjection;
 using VideoProcessor.Api.Common;
 
 namespace VideoProcessor.UnitTests.Common;
@@ -20,7 +19,7 @@ public sealed class ValidationFilterTests
     }
 
     [Fact]
-    public async Task Invalid_request_returns_a_validation_problem_with_field_errors_and_skips_the_handler()
+    public async Task Invalid_request_returns_a_validation_problem_with_camel_case_field_errors_and_skips_the_handler()
     {
         var handlerCalled = false;
 
@@ -33,7 +32,7 @@ public sealed class ValidationFilterTests
         handlerCalled.Should().BeFalse();
         var problem = result.Should().BeOfType<ValidationProblem>().Subject;
         problem.StatusCode.Should().Be(400);
-        problem.ProblemDetails.Errors.Keys.Should().BeEquivalentTo("Name", "Size");
+        problem.ProblemDetails.Errors.Keys.Should().BeEquivalentTo("name", "size");
     }
 
     [Fact]
@@ -45,14 +44,25 @@ public sealed class ValidationFilterTests
         result.Should().BeOfType<Ok<string>>().Which.Value.Should().Be("handled");
     }
 
-    private static ValueTask<object?> Invoke(CreateThingRequest request, EndpointFilterDelegate next)
+    [Fact]
+    public async Task Missing_request_returns_a_validation_problem_and_skips_the_handler()
     {
-        var services = new ServiceCollection()
-            .AddSingleton<IValidator<CreateThingRequest>, CreateThingRequestValidator>()
-            .BuildServiceProvider();
-        var httpContext = new DefaultHttpContext { RequestServices = services };
-        var context = EndpointFilterInvocationContext.Create(httpContext, request);
+        var handlerCalled = false;
 
-        return new ValidationFilter<CreateThingRequest>().InvokeAsync(context, next);
+        var result = await Invoke(null, _ =>
+        {
+            handlerCalled = true;
+            return ValueTask.FromResult<object?>(TypedResults.Ok());
+        });
+
+        handlerCalled.Should().BeFalse();
+        result.Should().BeOfType<ValidationProblem>().Which.StatusCode.Should().Be(400);
+    }
+
+    private static ValueTask<object?> Invoke(CreateThingRequest? request, EndpointFilterDelegate next)
+    {
+        var context = EndpointFilterInvocationContext.Create(new DefaultHttpContext(), request);
+
+        return new ValidationFilter<CreateThingRequest>(new CreateThingRequestValidator()).InvokeAsync(context, next);
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using VideoProcessor.Api.Common;
@@ -20,6 +21,12 @@ builder.Services
     .AddIdentityApiEndpoints<User>()
     .AddEntityFrameworkStores<AppDbContext>();
 
+// Tokens are protected with Data Protection; keeping the key ring in PostgreSQL means tokens survive
+// Api restarts and container recreation, and work across Api instances.
+builder.Services.AddDataProtection()
+    .SetApplicationName("VideoProcessor")
+    .PersistKeysToDbContext<AppDbContext>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -39,11 +46,10 @@ app.UseStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
 
-var auth = app.MapGroup("/auth").WithTags("Auth");
-auth.MapIdentityApi<User>();
 // Identity's register/login/refresh carry no authorization metadata, so the fallback policy would block them.
-// Its /manage endpoints require authorization explicitly; everything else in the group is public.
-((IEndpointConventionBuilder)auth).Finally(endpoint =>
+// Its /manage endpoints require authorization explicitly. Only Identity's own endpoints are opened up here,
+// so anything else later mapped under /auth still falls under the fallback policy.
+app.MapGroup("/auth").WithTags("Auth").MapIdentityApi<User>().Finally(endpoint =>
 {
     if (!endpoint.Metadata.OfType<IAuthorizeData>().Any())
     {
