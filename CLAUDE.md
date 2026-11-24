@@ -202,7 +202,7 @@ Run from the repository root. Integration tests and the local stack need Docker 
 | Build | `dotnet build` |
 | Test (all) | `dotnet test` |
 | Unit tests only | `dotnet test tests/UnitTests` |
-| Single test class | `dotnet test tests/IntegrationTests --filter "FullyQualifiedName~AccountTests"` |
+| Single test class | `dotnet test tests/IntegrationTests --filter "FullyQualifiedName~AuthTests"` |
 | Start Postgres + Azurite only | `docker compose up -d postgres azurite` |
 | Run Api (Scalar at http://localhost:5080/scalar) | `dotnet run --project src/Api` |
 | Run Worker | `dotnet run --project src/Worker` |

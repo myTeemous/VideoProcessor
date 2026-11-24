@@ -4,10 +4,10 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Authentication.BearerToken;
 using VideoProcessor.IntegrationTests.Harness;
 
-namespace VideoProcessor.IntegrationTests.Accounts;
+namespace VideoProcessor.IntegrationTests.Auth;
 
 [Collection(AppCollection.Name)]
-public sealed class AccountTests(AppFixture app)
+public sealed class AuthTests(AppFixture app)
 {
     private const string Password = "Correct-horse-1";
 
