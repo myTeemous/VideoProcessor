@@ -4,6 +4,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using VideoProcessor.Core.Data;
+using VideoProcessor.Core.Infrastructure;
+using VideoProcessor.Core.Infrastructure.FFmpeg;
+using VideoProcessor.Core.Infrastructure.Storage;
 
 namespace VideoProcessor.Core;
 
@@ -19,6 +22,11 @@ public static class CoreServiceCollectionExtensions
             options.UseNpgsql(RequiredConnectionString(sp, "Postgres")));
 
         services.AddSingleton(sp => new BlobServiceClient(RequiredConnectionString(sp, "BlobStorage")));
+        services.AddOptions<BlobStorageOptions>().BindConfiguration(BlobStorageOptions.SectionName);
+        services.AddSingleton<VideoStorage>();
+
+        services.AddOptions<FFmpegOptions>().BindConfiguration(FFmpegOptions.SectionName);
+        services.AddSingleton<IVideoProcessor, FFmpegVideoProcessor>();
 
         return services;
     }

@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,6 +24,9 @@ public sealed class AppFixture : IAsyncLifetime
         .WithCommand("--skipApiVersionCheck")
         .Build();
 
+    /// <summary>The maximum upload size the Api runs with in tests: small enough for a test to exceed with a real blob.</summary>
+    public const long MaxUploadSizeBytes = 5 * 1024 * 1024;
+
     private ApiFactory? _api;
     private IHost? _worker;
 
@@ -27,6 +34,23 @@ public sealed class AppFixture : IAsyncLifetime
     public FakeTimeProvider Time { get; } = new();
 
     public HttpClient CreateClient() => Api.CreateClient();
+
+    /// <summary>Registers a new User, logs in and returns a client that sends their bearer token.</summary>
+    public async Task<HttpClient> CreateAuthenticatedClientAsync()
+    {
+        const string password = "Correct-horse-1";
+        var client = CreateClient();
+        var email = $"user-{Guid.NewGuid():N}@example.com";
+
+        var register = await client.PostAsJsonAsync("/auth/register", new { email, password });
+        register.EnsureSuccessStatusCode();
+        var login = await client.PostAsJsonAsync("/auth/login", new { email, password });
+        login.EnsureSuccessStatusCode();
+        var tokens = await login.Content.ReadFromJsonAsync<AccessTokenResponse>();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
+        return client;
+    }
 
     private ApiFactory Api => _api ?? throw new InvalidOperationException("Fixture not initialised.");
 
@@ -38,6 +62,7 @@ public sealed class AppFixture : IAsyncLifetime
         {
             ["ConnectionStrings:Postgres"] = _postgres.GetConnectionString(),
             ["ConnectionStrings:BlobStorage"] = _azurite.GetConnectionString(),
+            ["Uploads:MaxSizeBytes"] = MaxUploadSizeBytes.ToString(CultureInfo.InvariantCulture),
         };
 
         // Creating the server starts the Api, which applies migrations in Development.
