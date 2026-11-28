@@ -237,6 +237,63 @@ namespace VideoProcessor.Core.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("VideoProcessor.Core.Domain.Video", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BlobName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("DeclaredSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long?>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlobName")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("Videos");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -286,6 +343,58 @@ namespace VideoProcessor.Core.Data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("VideoProcessor.Core.Domain.Video", b =>
+                {
+                    b.HasOne("VideoProcessor.Core.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsOne("VideoProcessor.Core.Domain.MediaMetadata", "Metadata", b1 =>
+                        {
+                            b1.Property<Guid>("VideoId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("AudioCodec")
+                                .HasMaxLength(32)
+                                .HasColumnType("character varying(32)");
+
+                            b1.Property<long?>("Bitrate")
+                                .HasColumnType("bigint");
+
+                            b1.Property<string>("Container")
+                                .IsRequired()
+                                .HasMaxLength(32)
+                                .HasColumnType("character varying(32)");
+
+                            b1.Property<TimeSpan?>("Duration")
+                                .HasColumnType("interval");
+
+                            b1.Property<double?>("FrameRate")
+                                .HasColumnType("double precision");
+
+                            b1.Property<int?>("Height")
+                                .HasColumnType("integer");
+
+                            b1.Property<string>("VideoCodec")
+                                .HasMaxLength(32)
+                                .HasColumnType("character varying(32)");
+
+                            b1.Property<int?>("Width")
+                                .HasColumnType("integer");
+
+                            b1.HasKey("VideoId");
+
+                            b1.ToTable("Videos");
+
+                            b1.WithOwner()
+                                .HasForeignKey("VideoId");
+                        });
+
+                    b.Navigation("Metadata");
                 });
 #pragma warning restore 612, 618
         }
