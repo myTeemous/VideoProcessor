@@ -55,12 +55,12 @@ public sealed class ConfirmUploadHandler(
             return Error.Conflict("video.not_awaiting_upload", $"Video {videoId} is {video.Status}, not AwaitingUpload.");
         }
 
-        if (await storage.GetSizeAsync(video.BlobName, cancellationToken) is not { } size)
+        if (await storage.GetUploadSizeAsync(video.BlobName, cancellationToken) is not { } uploadSize)
         {
             return Error.Validation("video.blob_missing", "No file has been uploaded for this Video.");
         }
 
-        await Validate(video, size, cancellationToken);
+        await Validate(video, uploadSize, cancellationToken);
 
         try
         {
@@ -68,25 +68,47 @@ public sealed class ConfirmUploadHandler(
         }
         catch (DbUpdateConcurrencyException)
         {
+            // The request that won owns the blobs now; leave them alone.
             return Error.Conflict("video.not_awaiting_upload", $"Video {videoId} was confirmed by another request.");
+        }
+
+        // The Upload slot is spent. A Rejected Video keeps no file.
+        await storage.DeleteUploadAsync(video.BlobName, cancellationToken);
+        if (video.Status == VideoStatus.Rejected)
+        {
+            await storage.DeleteVideoAsync(video.BlobName, cancellationToken);
         }
 
         return ToResponse(video);
     }
 
-    private async Task Validate(Video video, long size, CancellationToken cancellationToken)
+    private async Task Validate(Video video, long uploadSize, CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow();
-
         // The declared size was only a hint; the blob itself must be within the limit.
-        if (size > options.Value.MaxSizeBytes)
+        // Checked before copying so an oversized upload is never copied.
+        if (uploadSize > options.Value.MaxSizeBytes)
         {
-            video.Reject(size, VideoRejectionReason.TooLarge, now);
+            video.Reject(uploadSize, VideoRejectionReason.TooLarge, time.GetUtcNow());
             return;
         }
 
-        var readUrl = storage.GetReadUrl(video.BlobName, options.Value.ProbeUrlLifetime);
+        // From here on only the copy counts: the upload can still change through its Upload slot URL.
+        var size = await storage.CopyUploadToVideosAsync(video.BlobName, cancellationToken);
+        if (size > options.Value.MaxSizeBytes)
+        {
+            video.Reject(size, VideoRejectionReason.TooLarge, time.GetUtcNow());
+            return;
+        }
+
+        if (size == 0)
+        {
+            video.Reject(size, VideoRejectionReason.NotAVideo, time.GetUtcNow());
+            return;
+        }
+
+        var readUrl = storage.GetVideoReadUrl(video.BlobName, options.Value.ProbeUrlLifetime);
         var probe = await videoProcessor.ProbeAsync(readUrl.AbsoluteUri, cancellationToken);
+        var now = time.GetUtcNow();
 
         if (!probe.IsSuccess || !probe.Value.HasVideo)
         {

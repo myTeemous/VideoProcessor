@@ -59,9 +59,11 @@ public sealed class Video
 
     private void Confirm(long size, DateTimeOffset now)
     {
+        // An invariant, not flow control: callers report a Video that isn't AwaitingUpload as a Conflict
+        // before getting here, so reaching this throw means a bug.
         if (Status != VideoStatus.AwaitingUpload)
         {
-            throw new InvalidOperationException($"Video {Id} is {Status}, not AwaitingUpload.");
+            throw new InvalidOperationException($"Invariant violated: Video {Id} is {Status}, not AwaitingUpload.");
         }
 
         Size = size;

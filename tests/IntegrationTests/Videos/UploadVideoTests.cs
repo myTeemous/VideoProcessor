@@ -106,6 +106,8 @@ public sealed class UploadVideoTests(AppFixture app)
     [InlineData("not-a-video.mp4", "holiday.mp4", "NotAVideo")]
     // An FLV claiming to be an MP4: the container FFprobe detects decides, not the extension.
     [InlineData("disallowed-container.flv", "holiday.mp4", "ContainerNotAllowed")]
+    // 3GP shares FFprobe's MP4 demuxer, but it isn't MP4.
+    [InlineData("disallowed-container.3gp", "holiday.mp4", "ContainerNotAllowed")]
     public async Task Confirming_an_invalid_file_rejects_the_video_with_a_reason(
         string sampleClip, string fileName, string reason)
     {

@@ -56,8 +56,8 @@ if (app.Environment.IsDevelopment())
         await db.Database.MigrateAsync(app.Lifetime.ApplicationStopping);
     }
 
-    // Outside Development the blob container is provisioned with the storage account.
-    await app.Services.GetRequiredService<VideoStorage>().EnsureContainerExistsAsync(app.Lifetime.ApplicationStopping);
+    // Outside Development the blob containers are provisioned with the storage account.
+    await app.Services.GetRequiredService<VideoStorage>().EnsureContainersExistAsync(app.Lifetime.ApplicationStopping);
 
     app.MapOpenApi().AllowAnonymous();
     app.MapScalarApiReference().AllowAnonymous();

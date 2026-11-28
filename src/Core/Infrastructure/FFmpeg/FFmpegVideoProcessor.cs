@@ -51,14 +51,23 @@ internal sealed class FFmpegVideoProcessor(IOptions<FFmpegOptions> options, ILog
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning("FFprobe timed out after {Timeout}.", options.Value.ProbeTimeout);
-            return Unreadable;
+            throw new TimeoutException($"FFprobe did not finish within {options.Value.ProbeTimeout}.");
         }
 
         if (outcome.ExitCode != 0)
         {
-            logger.LogInformation("FFprobe exited with {ExitCode}: {Error}", outcome.ExitCode, outcome.StandardError);
-            return Unreadable;
+            // FFprobe echoes the input, which may be a URL carrying a SAS signature.
+            var error = outcome.StandardError.Replace(input, "<input>", StringComparison.Ordinal).Trim();
+
+            // Only a file FFprobe could read but not understand is "not media". Anything else (the URL unreachable,
+            // a storage error) is an infrastructure failure, which must not be mistaken for a verdict on the file.
+            if (error.Contains(InvalidDataMessage, StringComparison.Ordinal))
+            {
+                logger.LogInformation("FFprobe found no readable media: {Error}", error);
+                return Unreadable;
+            }
+
+            throw new InvalidOperationException($"FFprobe exited with {outcome.ExitCode}: {Truncate(error)}");
         }
 
         try
@@ -71,6 +80,11 @@ internal sealed class FFmpegVideoProcessor(IOptions<FFmpegOptions> options, ILog
             return Unreadable;
         }
     }
+
+    /// <summary>FFmpeg's text for AVERROR_INVALIDDATA, printed when no demuxer recognises the input.</summary>
+    private const string InvalidDataMessage = "Invalid data found when processing input";
+
+    private static string Truncate(string text) => text.Length <= 1000 ? text : text[..1000] + "…";
 
     private static bool IsHttp(string input) =>
         input.StartsWith("http://", StringComparison.OrdinalIgnoreCase)

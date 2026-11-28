@@ -40,14 +40,32 @@ internal sealed record FFprobeOutput(
     }
 
     /// <summary>
-    /// FFprobe names demuxers, not containers: one demuxer reads MP4 and MOV, another reads WebM and MKV.
-    /// MOV is told apart by its QuickTime brand; WebM is Matroska restricted to WebM codecs.
+    /// FFprobe names demuxers, not containers: one demuxer reads MP4, MOV, 3GP and others; another reads WebM and MKV.
+    /// The ISO family is told apart by its major brand; WebM is Matroska restricted to WebM codecs.
     /// </summary>
     private string NormaliseContainer(string formatName, IReadOnlyList<FFprobeStream> streams) => formatName switch
     {
-        "mov,mp4,m4a,3gp,3g2,mj2" => Format?.Tags?.MajorBrand?.Trim() == "qt" ? "mov" : "mp4",
+        "mov,mp4,m4a,3gp,3g2,mj2" => IsoContainer(Format?.Tags?.MajorBrand?.Trim()),
         "matroska,webm" => streams.All(s => s.CodecName is not null && WebmCodecs.Contains(s.CodecName)) ? "webm" : "mkv",
         _ => formatName.Split(',')[0],
+    };
+
+    /// <summary>
+    /// Brands that mean a plain MP4 (ISO base media, MPEG-4 and Apple's M4V). Anything outside this list is not
+    /// reported as mp4, so it can't pass an allow-list that names only mp4.
+    /// </summary>
+    private static readonly HashSet<string> Mp4Brands =
+        ["isom", "iso2", "iso3", "iso4", "iso5", "iso6", "mp41", "mp42", "avc1", "M4V", "M4VH", "M4VP", "dash", "mmp4"];
+
+    private static string IsoContainer(string? majorBrand) => majorBrand switch
+    {
+        // QuickTime files predating the ftyp box carry no brand.
+        null or "" or "qt" => "mov",
+        _ when Mp4Brands.Contains(majorBrand) => "mp4",
+        _ when majorBrand.StartsWith("3g2", StringComparison.Ordinal) => "3g2",
+        _ when majorBrand.StartsWith("3g", StringComparison.Ordinal) => "3gp",
+        "mjp2" or "mj2s" => "mj2",
+        _ => majorBrand.ToLowerInvariant(),
     };
 
     private static double? ParseDouble(string? value) =>
